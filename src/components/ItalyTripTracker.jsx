@@ -161,7 +161,7 @@ function CropModal({ src, onDone, onCancel, T }) {
   const [scale, setScale] = useState(1);
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
   const dragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
-  const TARGET_W = 800; const TARGET_H = 400;
+  const TARGET_W = 500; const TARGET_H = 250;
 
   useEffect(() => {
     const img = new Image(); img.onload = () => {
@@ -180,7 +180,7 @@ function CropModal({ src, onDone, onCancel, T }) {
     const c = canvasRef.current; c.width = TARGET_W; c.height = TARGET_H;
     const ctx = c.getContext("2d");
     ctx.drawImage(imgRef.current, offset.x, offset.y, imgSize.w * scale, imgSize.h * scale);
-    onDone(c.toDataURL("image/jpeg", 0.85));
+    onDone(c.toDataURL("image/jpeg", 0.7));
   };
 
   const adjustScale = (delta) => {
@@ -222,7 +222,6 @@ function PhotoCarousel({ photos, onAddPhotos, onDeletePhoto, T }) {
 
   const handleFiles = (e) => {
     const fs = Array.from(e.target.files); if (!fs.length) return;
-    // Read all files, then crop one by one
     Promise.all(fs.map(f => new Promise(r => { const rd = new FileReader(); rd.onload = ev => r(ev.target.result); rd.readAsDataURL(f); }))).then(urls => {
       setCropQueue(urls.slice(1)); setCroppedBatch([]); setCropSrc(urls[0]);
     });
@@ -238,7 +237,6 @@ function PhotoCarousel({ photos, onAddPhotos, onDeletePhoto, T }) {
     }
   };
   const onCropCancel = () => {
-    // skip this image
     if (cropQueue.length > 0) {
       setCropSrc(cropQueue[0]); setCropQueue(q => q.slice(1));
     } else {
