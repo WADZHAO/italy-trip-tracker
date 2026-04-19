@@ -3,7 +3,18 @@
     "allow": [
       "Bash(npm run *)",
       "Bash(npm uninstall *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "WebSearch",
+      "Bash(python3)",
+      "WebFetch(domain:www.nlg.it)",
+      "WebFetch(domain:www.capri.com)",
+      "WebFetch(domain:www.ferryhopper.com)",
+      "WebFetch(domain:www.italotreno.com)",
+      "WebFetch(domain:www.trenitalia.com)",
+      "WebFetch(domain:www.directferries.com)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }

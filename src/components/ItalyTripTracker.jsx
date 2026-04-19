@@ -556,6 +556,10 @@ function Schedule({ schedule, setSchedule, T }) {
 
   return (
     <div style={{ paddingBottom: 40 }}>
+      <button onClick={() => { if (schedule.length === 0 || window.confirm("Replace current schedule with your trip template?")) setSchedule(INITIAL_SCHEDULE); }}
+        style={{ width: "100%", marginBottom: 14, background: T.cream, border: `1px dashed ${T.border}`, borderRadius: 14, padding: "12px", color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+        📥 Load My Trip (Jun 20–28)
+      </button>
       <div style={{ ...mkCard(T), marginBottom: 18 }}>
         <span style={mkLbl(T)}>Add Day</span>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -621,6 +625,62 @@ function Schedule({ schedule, setSchedule, T }) {
   );
 }
 
+// ── Receipt Scanner ───────────────────────────────────────────────────────
+function ScanReceipt({ T, onResult }) {
+  const [scanning, setScanning] = useState(false);
+  const [needKey, setNeedKey] = useState(false);
+  const [keyInput, setKeyInput] = useState("");
+  const fileRef = useRef();
+
+  const handleFile = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const key = localStorage.getItem("anthropic_key");
+    if (!key) { setNeedKey(true); e.target.value = ""; return; }
+    setScanning(true);
+    try {
+      const b64 = await new Promise(r => { const rd = new FileReader(); rd.onload = ev => r(ev.target.result.split(",")[1]); rd.readAsDataURL(f); });
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001", max_tokens: 300,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: f.type || "image/jpeg", data: b64 } },
+            { type: "text", text: `Extract from this receipt. Respond with JSON only (no markdown):
+{"amount":"12.50","merchant":"Nome Negozio","category":"🍕 Food","description":"English description of what was purchased"}
+Rules: keep merchant name in original language; translate description to English; amount in EUR (convert if needed); category must be one of: 🍕 Food, 🚌 Transport, 🏨 Hotel, 🎭 Activities, 🛍️ Shopping, 💊 Health, 📦 Other` }
+          ]}]
+        })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "";
+      const parsed = JSON.parse(text.match(/\{[\s\S]*?\}/)?.[0] || "{}");
+      if (parsed.amount) onResult(parsed);
+      else alert("Couldn't read the receipt — try a clearer photo.");
+    } catch { alert("Scan failed. Check your Anthropic API key or network."); }
+    finally { setScanning(false); e.target.value = ""; }
+  };
+
+  if (needKey) return (
+    <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+      <input placeholder="Paste Anthropic API key (sk-ant-...)" value={keyInput} onChange={e => setKeyInput(e.target.value)}
+        style={mkInp(T, { flex: 1, fontSize: 11 })} />
+      <button onClick={() => { if (keyInput.trim()) { localStorage.setItem("anthropic_key", keyInput.trim()); setNeedKey(false); fileRef.current.click(); } }}
+        style={{ background: T.accent, color: "#fff", border: "none", borderRadius: 10, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Save & Scan</button>
+    </div>
+  );
+
+  return (
+    <>
+      <button onClick={() => fileRef.current.click()} disabled={scanning}
+        style={{ marginTop: 10, width: "100%", background: scanning ? T.sand : T.cream, border: `1px dashed ${T.border}`, borderRadius: 10, color: T.accent, padding: "10px", fontSize: 13, cursor: scanning ? "default" : "pointer", fontWeight: 600 }}>
+        {scanning ? "⏳ Scanning receipt…" : "📷 Scan Receipt with AI"}
+      </button>
+      <input type="file" accept="image/*" capture="environment" ref={fileRef} onChange={handleFile} style={{ display: "none" }} />
+    </>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════
 // EXPENSES
 // ════════════════════════════════════════════════════════════════
@@ -668,6 +728,7 @@ function Expenses({ expenses, setExpenses, T }) {
             </button>
           ))}
         </div>
+        <ScanReceipt T={T} onResult={r => setForm(f => ({ ...f, amount: r.amount || "", description: r.description || r.merchant || "", category: EXPENSE_CATS.find(c => c === r.category) || f.category }))} />
       </div>
       <div style={{ ...mkCard(T), marginBottom: 14 }}><span style={mkLbl(T)}>Record Expense</span>
         <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
@@ -720,6 +781,37 @@ function Expenses({ expenses, setExpenses, T }) {
 // ════════════════════════════════════════════════════════════════
 // PACKING
 // ════════════════════════════════════════════════════════════════
+const INITIAL_SCHEDULE = [
+  { city: "Seattle", date: "2026-06-20", events: [
+    { time: "17:30", title: "✈️ Flight SEA → FCO", note: "Alaska Airlines AS180 · Nonstop · 10h45m · Seat 20B · Arrives Rome Jun 21 1:15 PM", confirmNo: "UDNFIY", address: "Seattle-Tacoma International Airport", phone: "1-800-252-7522", url: "https://www.alaskaair.com" },
+  ]},
+  { city: "Rome", date: "2026-06-21", events: [
+    { time: "13:15", title: "🛬 Arrive Rome Fiumicino (FCO)", note: "Alaska AS180 · Take Leonardo Express to Roma Termini (~32 min)", confirmNo: "UDNFIY", address: "Rome Fiumicino Airport (FCO)", phone: "1-800-252-7522", url: "" },
+    { time: "15:00", title: "🏨 Hotel d'Inghilterra", note: "Superior Room · Breakfast included · 140,000 Hilton Points · 2 adults", confirmNo: "1000448984", address: "Via Bocca di Leone 14, Rome 00187", phone: "+39 06 699811", url: "https://www.hilton.com" },
+  ]},
+  { city: "Rome → Capri", date: "2026-06-22", events: [
+    { time: "09:00", title: "🚂 Train: Rome → Naples", note: "Frecciarossa or Italo · ~1h13m · Roma Termini → Napoli Centrale", confirmNo: "", address: "Roma Termini Station", phone: "", url: "https://www.trenitalia.com/en.html" },
+    { time: "11:00", title: "⛴️ Ferry: Naples → Capri", note: "NLG Hydrofoil · ~45 min · Molo Beverello · €23.50 + €5 landing fee/person", confirmNo: "", address: "Molo Beverello, Naples", phone: "", url: "https://nlg.nefesy.com/btoc/b2c.php?LANG=EN" },
+    { time: "14:00", title: "🏨 Sina Flora Capri", note: "Deluxe Double, Terrace, Partial Sea View · 2 nights · $1,741.63 total", confirmNo: "73397203548466", address: "Via Federico Serena 26, Capri 80073", phone: "", url: "https://www.expedia.com" },
+  ]},
+  { city: "Capri", date: "2026-06-23", events: [] },
+  { city: "Capri → Florence", date: "2026-06-24", events: [
+    { time: "09:00", title: "⛴️ Ferry: Capri → Naples", note: "NLG Hydrofoil · ~45 min · Marina Grande → Molo Beverello", confirmNo: "", address: "Marina Grande, Capri", phone: "", url: "https://nlg.nefesy.com/btoc/b2c.php?LANG=EN" },
+    { time: "11:00", title: "🚂 Train: Naples → Florence", note: "Frecciarossa or Italo · ~2h56m · Napoli Centrale → Firenze S.M.N.", confirmNo: "", address: "Napoli Centrale Station", phone: "", url: "https://www.trenitalia.com/en.html" },
+  ]},
+  { city: "Florence", date: "2026-06-25", events: [] },
+  { city: "Florence → Rome", date: "2026-06-26", events: [
+    { time: "10:00", title: "🚂 Train: Florence → Rome", note: "Frecciarossa or Italo · ~1h30m · Firenze S.M.N. → Roma Termini", confirmNo: "", address: "Firenze Santa Maria Novella Station", phone: "", url: "https://www.trenitalia.com/en.html" },
+    { time: "14:00", title: "🏨 Palm Suite", note: "Palm Forum View · Breakfast included · €686 + €12 taxes · 2 adults", confirmNo: "1000449009", address: "Via del Colosseo 20, Rome 00184", phone: "+39 06 8351 2491", url: "https://www.hilton.com" },
+  ]},
+  { city: "Rome", date: "2026-06-27", events: [
+    { time: "14:00", title: "🏨 Palazzo Manfredi", note: "Prestige Room · Breakfast included · 150,000 Hilton Points · 2 adults", confirmNo: "1000448997", address: "Via Labicana 125, Rome 00184", phone: "+39 06 7759 1380", url: "https://www.hilton.com" },
+  ]},
+  { city: "Rome → Seattle", date: "2026-06-28", events: [
+    { time: "15:25", title: "✈️ Flight FCO → SEA", note: "Alaska Airlines AS181 · Nonstop · 11h15m · Seat 19H · Arrives Seattle 5:40 PM", confirmNo: "UDNFIY", address: "Rome Fiumicino Airport (FCO)", phone: "1-800-252-7522", url: "https://www.alaskaair.com" },
+  ]},
+];
+
 const initialPackingList = [
   { id:1,item:"Passport & ID",packed:false,category:"Documents"},{ id:2,item:"Travel Insurance",packed:false,category:"Documents"},
   { id:3,item:"Flight tickets",packed:false,category:"Documents"},{ id:4,item:"Hotel bookings",packed:false,category:"Documents"},
