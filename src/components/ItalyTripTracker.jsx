@@ -1,8 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
-import { db } from "../firebase";
-
-const TRIP_DOC = doc(db, "trips", "shared");
+import { supabase, uploadPhoto } from "../supabase";
 
 const EUR_TO_USD = 1.08;
 const CITIES = ["Rome", "Florence", "Venice", "Milan", "Amalfi", "Naples", "Other"];
@@ -217,6 +214,7 @@ function PhotoCarousel({ photos, onAddPhotos, onDeletePhoto, T }) {
   const [cropSrc, setCropSrc] = useState(null);
   const [cropQueue, setCropQueue] = useState([]);
   const [croppedBatch, setCroppedBatch] = useState([]);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef();
   const touchX = useRef(0);
 
@@ -228,20 +226,32 @@ function PhotoCarousel({ photos, onAddPhotos, onDeletePhoto, T }) {
     e.target.value = "";
   };
 
+  const uploadAndAdd = async (batch) => {
+    setUploading(true);
+    try {
+      const urls = await Promise.all(batch.map(b => uploadPhoto(b, "hero")));
+      onAddPhotos(urls);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const onCropDone = (url) => {
     const next = [...croppedBatch, url];
     if (cropQueue.length > 0) {
       setCropSrc(cropQueue[0]); setCropQueue(q => q.slice(1)); setCroppedBatch(next);
     } else {
-      onAddPhotos(next); setCropSrc(null); setCroppedBatch([]);
+      setCropSrc(null); setCroppedBatch([]);
+      uploadAndAdd(next);
     }
   };
   const onCropCancel = () => {
     if (cropQueue.length > 0) {
       setCropSrc(cropQueue[0]); setCropQueue(q => q.slice(1));
     } else {
-      if (croppedBatch.length > 0) onAddPhotos(croppedBatch);
-      setCropSrc(null); setCroppedBatch([]);
+      setCropSrc(null);
+      if (croppedBatch.length > 0) uploadAndAdd(croppedBatch);
+      setCroppedBatch([]);
     }
   };
 
@@ -272,6 +282,12 @@ function PhotoCarousel({ photos, onAddPhotos, onDeletePhoto, T }) {
   }, [photos.length]);
 
   if (cropSrc) return <CropModal src={cropSrc} onDone={onCropDone} onCancel={onCropCancel} T={T} />;
+
+  if (uploading) return (
+    <div style={{ marginBottom: 16, border: `2px dashed ${T.sand}`, borderRadius: 18, padding: 22, textAlign: "center", color: T.textSoft, fontSize: 13, background: T.cream }}>
+      <div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div>Uploading photos…
+    </div>
+  );
 
   if (!photos.length) return (
     <div style={{ marginBottom: 16 }}>
@@ -767,10 +783,21 @@ function Packing({ packingList, setPackingList, T }) {
 function Journal({ entries, setEntries, T }) {
   const blank = () => ({ date: todayStr(), city: "", title: "", note: "", photoDataURL: null });
   const [form, setForm] = useState(blank()); const [editing, setEditing] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef(); const editRef = useRef();
-  const readP = (file, cb) => { const r = new FileReader(); r.onload = ev => cb(ev.target.result); r.readAsDataURL(file); };
 
-  const save = () => { if (!form.title) return; setEntries(p => [...p, { ...form, id: Date.now() }]); setForm(blank()); if (fileRef.current) fileRef.current.value=""; };
+  const pickPhoto = async (file, onUrl) => {
+    setUploading(true);
+    try {
+      const b64 = await new Promise(r => { const rd = new FileReader(); rd.onload = ev => r(ev.target.result); rd.readAsDataURL(file); });
+      const url = await uploadPhoto(b64, "journal");
+      onUrl(url);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const save = () => { if (!form.title || uploading) return; setEntries(p => [...p, { ...form, id: Date.now() }]); setForm(blank()); if (fileRef.current) fileRef.current.value=""; };
 
   if (editing !== null) {
     const entry = entries[editing];
@@ -783,7 +810,7 @@ function Journal({ entries, setEntries, T }) {
         <div onClick={()=>editRef.current.click()} style={{ marginBottom:14,cursor:"pointer",borderRadius:18,overflow:"hidden",border:`1px solid ${T.border}`,minHeight:80 }}>
           {entry.photoDataURL ? <img src={entry.photoDataURL} alt="" style={{ width:"100%",maxHeight:240,objectFit:"cover",display:"block" }} /> : <div style={{ background:T.cream,padding:20,textAlign:"center",color:T.textSoft,fontSize:13 }}><div style={{ fontSize:26,marginBottom:6 }}>📷</div>Tap to add photo</div>}
         </div>
-        <input type="file" accept="image/*" ref={editRef} onChange={e=>{const f=e.target.files[0];if(!f)return;readP(f,url=>setEntries(p=>p.map((en,i)=>i===editing?{...en,photoDataURL:url}:en)));}} style={{ display:"none" }} />
+        <input type="file" accept="image/*" ref={editRef} onChange={e=>{const f=e.target.files[0];if(!f)return;pickPhoto(f,url=>setEntries(p=>p.map((en,i)=>i===editing?{...en,photoDataURL:url}:en)));}} style={{ display:"none" }} />
         <div style={{ ...mkCard(T),display:"flex",flexDirection:"column",gap:10 }}>
           <div style={{ display:"flex",gap:8 }}><input placeholder="City..." value={entry.city} onChange={e=>setEntries(p=>p.map((en,i)=>i===editing?{...en,city:e.target.value}:en))} style={mkInp(T,{flex:1})} /><input type="date" value={entry.date} onChange={e=>setEntries(p=>p.map((en,i)=>i===editing?{...en,date:e.target.value}:en))} style={mkInp(T,{flex:1})} /></div>
           <input value={entry.title} onChange={e=>setEntries(p=>p.map((en,i)=>i===editing?{...en,title:e.target.value}:en))} style={mkInp(T,{ fontFamily:HEADING,fontSize:18,fontWeight:700,color:T.accent })} />
@@ -804,8 +831,8 @@ function Journal({ entries, setEntries, T }) {
           <div onClick={()=>fileRef.current.click()} style={{ border:`2px dashed ${T.sand}`,borderRadius:12,padding:16,textAlign:"center",cursor:"pointer",color:T.textSoft,fontSize:13,background:T.cream,overflow:"hidden",minHeight:64 }}>
             {form.photoDataURL ? <img src={form.photoDataURL} alt="" style={{ width:"100%",maxHeight:180,objectFit:"cover",borderRadius:8,display:"block" }} /> : <><div style={{ fontSize:28,marginBottom:6 }}>📷</div>Tap to add photo</>}
           </div>
-          <input type="file" accept="image/*" ref={fileRef} onChange={e=>{const f=e.target.files[0];if(!f)return;readP(f,url=>setForm(p=>({...p,photoDataURL:url})));}} style={{ display:"none" }} />
-          <button onClick={save} style={{ background:T.accent,color:"#fff",border:"none",borderRadius:10,padding:"11px",fontWeight:700,fontSize:14,cursor:"pointer" }}>💾 Save Memory</button>
+          <input type="file" accept="image/*" ref={fileRef} onChange={e=>{const f=e.target.files[0];if(!f)return;pickPhoto(f,url=>setForm(p=>({...p,photoDataURL:url})));}} style={{ display:"none" }} />
+          <button onClick={save} disabled={uploading} style={{ background:uploading?T.sand:T.accent,color:"#fff",border:"none",borderRadius:10,padding:"11px",fontWeight:700,fontSize:14,cursor:uploading?"not-allowed":"pointer" }}>{uploading?"⏳ Uploading…":"💾 Save Memory"}</button>
         </div>
       </div>
       {entries.length===0 && <div style={{ textAlign:"center",color:T.textSoft,padding:"40px 20px" }}><div style={{ fontSize:40,marginBottom:10 }}>📓</div><div style={{ fontSize:14 }}>Your travel memories will appear here</div></div>}
@@ -856,33 +883,41 @@ export default function ItalyTripTracker() {
   const skipNextSave = useRef(false);
   const saveTimer = useRef(null);
 
-  // Subscribe to Firestore — real-time sync across all devices
+  const applyData = (d) => {
+    skipNextSave.current = true;
+    if (d.themeId) setThemeId(d.themeId);
+    if (d.tripName) setTripName(d.tripName);
+    if (d.tripDates) setTripDates(d.tripDates);
+    if (d.heroPhotos) setHeroPhotos(d.heroPhotos);
+    if (d.schedule) setSchedule(d.schedule);
+    if (d.expenses) setExpenses(d.expenses);
+    if (d.packingList) setPackingList(d.packingList);
+    if (d.journalEntries) setJournalEntries(d.journalEntries);
+  };
+
+  // Load + subscribe to real-time changes
   useEffect(() => {
-    const unsub = onSnapshot(TRIP_DOC, (snap) => {
-      const d = snap.data();
-      if (d) {
-        skipNextSave.current = true;
-        if (d.themeId) setThemeId(d.themeId);
-        if (d.tripName) setTripName(d.tripName);
-        if (d.tripDates) setTripDates(d.tripDates);
-        if (d.heroPhotos) setHeroPhotos(d.heroPhotos);
-        if (d.schedule) setSchedule(d.schedule);
-        if (d.expenses) setExpenses(d.expenses);
-        if (d.packingList) setPackingList(d.packingList);
-        if (d.journalEntries) setJournalEntries(d.journalEntries);
-      }
+    supabase.from("trip_data").select("data").eq("id", "shared").single().then(({ data: row }) => {
+      if (row?.data) applyData(row.data);
       setLoaded(true);
     });
-    return unsub;
+
+    const channel = supabase.channel("trip")
+      .on("postgres_changes", { event: "*", schema: "public", table: "trip_data", filter: "id=eq.shared" }, (payload) => {
+        if (payload.new?.data) applyData(payload.new.data);
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }, []);
 
-  // Debounced auto-save to Firestore (skips writes triggered by remote updates)
+  // Debounced auto-save (skips writes triggered by remote updates)
   useEffect(() => {
     if (!loaded) return;
     if (skipNextSave.current) { skipNextSave.current = false; return; }
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      setDoc(TRIP_DOC, { themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries });
+      supabase.from("trip_data").upsert({ id: "shared", data: { themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries }, updated_at: new Date().toISOString() });
     }, 800);
     return () => clearTimeout(saveTimer.current);
   }, [loaded, themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries]);
