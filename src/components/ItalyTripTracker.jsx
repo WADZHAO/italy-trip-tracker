@@ -794,7 +794,9 @@ const INITIAL_SCHEDULE = [
     { time: "11:00", title: "⛴️ Ferry: Naples → Capri", note: "NLG Hydrofoil · ~45 min · Molo Beverello · €23.50 + €5 landing fee/person", confirmNo: "", address: "Molo Beverello, Naples", phone: "", url: "https://nlg.nefesy.com/btoc/b2c.php?LANG=EN" },
     { time: "14:00", title: "🏨 Sina Flora Capri", note: "Deluxe Double, Terrace, Partial Sea View · 2 nights · $1,741.63 total", confirmNo: "73397203548466", address: "Via Federico Serena 26, Capri 80073", phone: "", url: "https://www.expedia.com" },
   ]},
-  { city: "Capri", date: "2026-06-23", events: [] },
+  { city: "Capri", date: "2026-06-23", events: [
+    { time: "", title: "🏨 Staying: Sina Flora Capri", note: "Night 2 of 2 · Deluxe Double, Terrace, Partial Sea View · Check-out Jun 24", confirmNo: "73397203548466", address: "Via Federico Serena 26, Capri 80073", phone: "", url: "https://www.expedia.com" },
+  ]},
   { city: "Capri → Florence", date: "2026-06-24", events: [
     { time: "09:00", title: "⛴️ Ferry: Capri → Naples", note: "NLG Hydrofoil · ~45 min · Marina Grande → Molo Beverello", confirmNo: "", address: "Marina Grande, Capri", phone: "", url: "https://nlg.nefesy.com/btoc/b2c.php?LANG=EN" },
     { time: "11:00", title: "🚂 Train: Naples → Florence", note: "Frecciarossa or Italo · ~2h56m · Napoli Centrale → Firenze S.M.N.", confirmNo: "", address: "Napoli Centrale Station", phone: "", url: "https://www.trenitalia.com/en.html" },
