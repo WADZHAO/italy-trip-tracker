@@ -1,4 +1,8 @@
 import { useState, useRef, useEffect } from "react";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
+
+const TRIP_DOC = doc(db, "trips", "shared");
 
 const EUR_TO_USD = 1.08;
 const CITIES = ["Rome", "Florence", "Venice", "Milan", "Amalfi", "Naples", "Other"];
@@ -834,19 +838,6 @@ function Journal({ entries, setEntries, T }) {
   );
 }
 
-// ── Storage helpers (localStorage for production) ─────────────────────────
-const STORAGE_KEY = "italy-trip-data";
-
-function loadData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function saveData(data) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
-}
 
 // ════════════════════════════════════════════════════════════════
 // ROOT
@@ -864,27 +855,38 @@ export default function ItalyTripTracker() {
   const [journalEntries, setJournalEntries] = useState([]);
   const weather = useWeather();
   const T = THEMES[themeId];
+  const skipNextSave = useRef(false);
+  const saveTimer = useRef(null);
 
-  // Load saved data on mount
+  // Subscribe to Firestore — real-time sync across all devices
   useEffect(() => {
-    const d = loadData();
-    if (d) {
-      if (d.themeId) setThemeId(d.themeId);
-      if (d.tripName) setTripName(d.tripName);
-      if (d.tripDates) setTripDates(d.tripDates);
-      if (d.heroPhotos) setHeroPhotos(d.heroPhotos);
-      if (d.schedule) setSchedule(d.schedule);
-      if (d.expenses) setExpenses(d.expenses);
-      if (d.packingList) setPackingList(d.packingList);
-      if (d.journalEntries) setJournalEntries(d.journalEntries);
-    }
-    setLoaded(true);
+    const unsub = onSnapshot(TRIP_DOC, (snap) => {
+      const d = snap.data();
+      if (d) {
+        skipNextSave.current = true;
+        if (d.themeId) setThemeId(d.themeId);
+        if (d.tripName) setTripName(d.tripName);
+        if (d.tripDates) setTripDates(d.tripDates);
+        if (d.heroPhotos) setHeroPhotos(d.heroPhotos);
+        if (d.schedule) setSchedule(d.schedule);
+        if (d.expenses) setExpenses(d.expenses);
+        if (d.packingList) setPackingList(d.packingList);
+        if (d.journalEntries) setJournalEntries(d.journalEntries);
+      }
+      setLoaded(true);
+    });
+    return unsub;
   }, []);
 
-  // Auto-save whenever anything changes (after initial load)
+  // Debounced auto-save to Firestore (skips writes triggered by remote updates)
   useEffect(() => {
     if (!loaded) return;
-    saveData({ themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries });
+    if (skipNextSave.current) { skipNextSave.current = false; return; }
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      setDoc(TRIP_DOC, { themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries });
+    }, 800);
+    return () => clearTimeout(saveTimer.current);
   }, [loaded, themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries]);
 
   if (!loaded) return (
