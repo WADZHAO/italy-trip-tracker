@@ -657,7 +657,7 @@ Rules: keep merchant name in original language; translate description to English
         style={{ marginTop: 10, width: "100%", background: scanning ? T.sand : T.cream, border: `1px dashed ${T.border}`, borderRadius: 10, color: T.accent, padding: "10px", fontSize: 13, cursor: scanning ? "default" : "pointer", fontWeight: 600 }}>
         {scanning ? "⏳ Scanning receipt…" : "📷 Scan Receipt with AI"}
       </button>
-      <input type="file" accept="image/*" capture="environment" ref={fileRef} onChange={handleFile} style={{ display: "none" }} />
+      <input type="file" accept="image/*" ref={fileRef} onChange={handleFile} style={{ display: "none" }} />
     </>
   );
 }
