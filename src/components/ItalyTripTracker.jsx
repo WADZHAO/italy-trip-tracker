@@ -961,10 +961,18 @@ export default function ItalyTripTracker() {
 
   // Load + subscribe to real-time changes
   useEffect(() => {
-    supabase.from("trip_data").select("data").eq("id", "shared").single().then(({ data: row }) => {
-      if (row?.data) applyData(row.data);
-      setLoaded(true);
-    });
+    const fetchLatest = () => {
+      supabase.from("trip_data").select("data").eq("id", "shared").single().then(({ data: row }) => {
+        if (row?.data) applyData(row.data);
+        setLoaded(true);
+      });
+    };
+
+    fetchLatest();
+
+    // Re-fetch whenever the tab becomes visible (e.g. switching from phone to laptop)
+    const onVisible = () => { if (document.visibilityState === "visible") fetchLatest(); };
+    document.addEventListener("visibilitychange", onVisible);
 
     const channel = supabase.channel("trip")
       .on("postgres_changes", { event: "*", schema: "public", table: "trip_data", filter: "id=eq.shared" }, (payload) => {
@@ -972,7 +980,10 @@ export default function ItalyTripTracker() {
       })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   // Debounced auto-save (skips writes triggered by remote updates)
@@ -981,7 +992,8 @@ export default function ItalyTripTracker() {
     if (skipNextSave.current) { skipNextSave.current = false; return; }
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      supabase.from("trip_data").upsert({ id: "shared", data: { themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries }, updated_at: new Date().toISOString() });
+      supabase.from("trip_data").upsert({ id: "shared", data: { themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries }, updated_at: new Date().toISOString() })
+        .then(({ error }) => { if (error) console.error("Sync failed:", error); });
     }, 800);
     return () => clearTimeout(saveTimer.current);
   }, [loaded, themeId, tripName, tripDates, heroPhotos, schedule, expenses, packingList, journalEntries]);
